@@ -106,7 +106,7 @@ def run_scraper_loop():
             print(f"❌ [爬蟲] 發生錯誤: {e}")
             
         print("⏳ 休息 3 分鐘後進行下一輪抓取...\n")
-        time.sleep(60) 
+        time.sleep(180) 
 
 # ==========================================
 # 2. Streamlit 介面與背景執行緒管理
