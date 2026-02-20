@@ -20,7 +20,7 @@ def scrape_single_date(page, date_str):
     statuses = [("CONFIRMED", "已建立"), ("ACKNOWLEDGED", "已確認"), ("PACKED", "已包裝"), ("PICKED", "已出貨")]
     date_data = {"date": date_str}
 
-    # 🚀 終極改法：放棄「點擊下拉選單」，直接用 URL 輪流訪問 4 個狀態
+    # 🚀 使用 URL 輪流訪問 4 個狀態
     for status_val, status_name in statuses:
         target_url = (
             f"https://merchant.shoalter.com/zh/order-management/orders/toship"
@@ -30,19 +30,15 @@ def scrape_single_date(page, date_str):
             f"&pageSize=20&pageNumber=1&sortColumn=orderDate&waybillStatuses={status_val}"
         )
         
-        # 1. 直接跳轉到該狀態的網址
         page.goto(target_url)
-        page.wait_for_timeout(3500) # 給網頁 3.5 秒充分載入初始資料
+        page.wait_for_timeout(3500) 
         
-        # 2. 嘗試點擊「商戶8小時送貨」過濾按鈕
         try:
-            # timeout=2000 表示如果 2 秒內找不到這按鈕，就不強求直接跳過
             page.locator('button:has-text("商戶8小時送貨")').click(timeout=2000, force=True)
-            page.wait_for_timeout(2000) # 點擊後等待 2 秒讓數字刷新
+            page.wait_for_timeout(2000) 
         except Exception:
-            pass # 如果當前頁面不需要點擊這個，就略過不報錯
+            pass 
 
-        # 3. 抓取最終結果數字
         try:
             result_text = page.locator('span:has-text("結果")').last.inner_text(timeout=5000)
             date_data[status_val] = extract_total_count(result_text)
@@ -52,7 +48,6 @@ def scrape_single_date(page, date_str):
     return date_data
 
 def scrape_hktvmall(username, password):
-    # 👉 修正 3：強制使用香港時間 (UTC+8)，避免抓到昨日或明日的錯誤資料
     now = datetime.utcnow() + timedelta(hours=8)
     
     today_str = now.strftime("%Y-%m-%d")
@@ -68,11 +63,11 @@ def scrape_hktvmall(username, password):
     results_data["status_msg"] = "⚡ 機器人運行中：每 3 分鐘自動抓取最新資料..."
 
     with sync_playwright() as p:
-        # 🚀 關鍵改法：啟動瀏覽器，並強制設定 1920x1080 大螢幕尺寸
+        # 強制設定 1920x1080 大螢幕尺寸
         browser = p.chromium.launch(headless=True) 
         context = browser.new_context(viewport={'width': 1920, 'height': 1080}) 
         page = context.new_page()
-        page.route("**/*.{png,jpg,jpeg,gif,svg}", lambda route: route.abort()) # 阻擋圖片載入加速
+        page.route("**/*.{png,jpg,jpeg,gif,svg}", lambda route: route.abort()) 
 
         print(f"\n🤖 [爬蟲] 登入 HKTVmall (香港時間: {now.strftime('%H:%M:%S')})")
         page.goto("https://merchant.shoalter.com/login") 
@@ -110,7 +105,6 @@ def run_scraper_loop():
         except Exception as e:
             print(f"❌ [爬蟲] 發生錯誤: {e}")
             
-        # 👉 修改 1：改成 180 秒（3分鐘）執行一次爬蟲
         print("⏳ 休息 3 分鐘後進行下一輪抓取...\n")
         time.sleep(180) 
 
@@ -118,27 +112,36 @@ def run_scraper_loop():
 # 2. Streamlit 介面與背景執行緒管理
 # ==========================================
 
-# 確保背景爬蟲只啟動一次
 @st.cache_resource
 def start_background_scraper():
     print("啟動背景爬蟲執行緒...")
-    
-    # 🟢 這行就是救命關鍵！讓 Streamlit 雲端知道要下載瀏覽器
     os.system("playwright install chromium")
-    
     thread = threading.Thread(target=run_scraper_loop, daemon=True)
     thread.start()
     return thread
 
-# 啟動爬蟲
 start_background_scraper()
 
-# 頁面設定
 st.set_page_config(page_title="HKTVmall 訂單監控", layout="wide")
 st.title("HKTVmall 訂單監控面板")
 
-# 讀取資料
+# 👉 這裡新增了「歸零按鈕」，按下去會強制把數據清空寫入 JSON
 file_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'order_data.json')
+
+if st.button("🗑️ 手動將數據歸零 (測試用)"):
+    zero_data = {
+        "status_msg": "測試中：數據已手動歸零，等待下一次抓取...",
+        "today": {"date": "等待更新...", "CONFIRMED": "0", "ACKNOWLEDGED": "0", "PACKED": "0", "PICKED": "0"},
+        "tomorrow": {"date": "等待更新...", "CONFIRMED": "0", "ACKNOWLEDGED": "0", "PACKED": "0", "PICKED": "0"},
+        "last_updated": "尚未更新"
+    }
+    with open(file_path, 'w', encoding='utf-8') as f:
+        json.dump(zero_data, f, ensure_ascii=False, indent=4)
+    st.success("✅ 數據已歸零！面板即將重新整理...")
+    time.sleep(1)
+    st.rerun()
+
+# 讀取資料
 try:
     with open(file_path, 'r', encoding='utf-8') as f:
         data = json.load(f)
@@ -146,7 +149,6 @@ except FileNotFoundError:
     data = {}
     st.warning("🔄 正在等待爬蟲抓取第一筆資料，這可能需要幾分鐘，請稍候...")
 
-# 顯示最後更新時間與狀態
 last_updated = data.get("last_updated", "--")
 status_msg = data.get("status_msg", "初始化中...")
 
@@ -158,7 +160,6 @@ else:
 
 st.markdown("---")
 
-# 渲染今日訂單
 if "today" in data and data["today"]:
     st.subheader(f"📦 今日訂單 ({data['today'].get('date', '--')})")
     col1, col2, col3, col4 = st.columns(4)
@@ -169,7 +170,6 @@ if "today" in data and data["today"]:
 
 st.markdown("<br>", unsafe_allow_html=True)
 
-# 渲染明日訂單
 if "tomorrow" in data and data["tomorrow"]:
     st.subheader(f"🚚 明日訂單 ({data['tomorrow'].get('date', '--')})")
     col1, col2, col3, col4 = st.columns(4)
@@ -178,6 +178,5 @@ if "tomorrow" in data and data["tomorrow"]:
     with col3: st.metric("已包裝 (PACKED)", data['tomorrow'].get('PACKED', '--'))
     with col4: st.metric("已出貨 (PICKED)", data['tomorrow'].get('PICKED', '--'))
 
-# 👉 修改 2：改成 10 秒更新一次畫面
 time.sleep(10)
 st.rerun()
