@@ -57,9 +57,7 @@ def scrape_single_date(page, date_str):
     return date_data
 
 def scrape_hktvmall(username, password):
-    # 🟢 修正 1：強制使用香港時間 (UTC+8)，避免雲端主機因為時差而抓錯「昨天」的資料！
-    now = datetime.utcnow() + timedelta(hours=8)
-    
+    now = datetime.now()
     today_str = now.strftime("%Y-%m-%d")
     tomorrow_str = (now + timedelta(days=1)).strftime("%Y-%m-%d")
     
@@ -101,14 +99,8 @@ def scrape_hktvmall(username, password):
 
 def run_scraper_loop():
     load_dotenv()
-    
-    # 🟢 為了讓 Streamlit Cloud 也能讀到密碼，增加 st.secrets 雙重保險
-    try:
-        MY_USERNAME = st.secrets.get("HKTV_USERNAME") or os.getenv("HKTV_USERNAME")
-        MY_PASSWORD = st.secrets.get("HKTV_PASSWORD") or os.getenv("HKTV_PASSWORD")
-    except:
-        MY_USERNAME = os.getenv("HKTV_USERNAME")
-        MY_PASSWORD = os.getenv("HKTV_PASSWORD")
+    MY_USERNAME = os.getenv("HKTV_USERNAME")
+    MY_PASSWORD = os.getenv("HKTV_PASSWORD")
     
     if not MY_USERNAME or not MY_PASSWORD:
         print("❌ [系統嚴重錯誤] 找不到帳號或密碼！")
@@ -120,8 +112,9 @@ def run_scraper_loop():
         except Exception as e:
             print(f"❌ [爬蟲] 發生錯誤: {e}")
             
+        # 👉 修改 1：改成 180 秒（3分鐘）執行一次爬蟲
         print("⏳ 休息 3 分鐘後進行下一輪抓取...\n")
-        time.sleep(60) 
+        time.sleep(180) 
 
 # ==========================================
 # 2. Streamlit 介面與背景執行緒管理
@@ -131,10 +124,6 @@ def run_scraper_loop():
 @st.cache_resource
 def start_background_scraper():
     print("啟動背景爬蟲執行緒...")
-    
-    # 🟢 修正 2：讓 Streamlit 雲端主機自動下載 Chromium 瀏覽器，沒有這行機器人會死機！
-    os.system("playwright install chromium")
-    
     thread = threading.Thread(target=run_scraper_loop, daemon=True)
     thread.start()
     return thread
@@ -187,6 +176,6 @@ if "tomorrow" in data and data["tomorrow"]:
     with col3: st.metric("已包裝 (PACKED)", data['tomorrow'].get('PACKED', '--'))
     with col4: st.metric("已出貨 (PICKED)", data['tomorrow'].get('PICKED', '--'))
 
-# 畫面每 10 秒更新一次
+# 👉 修改 2：改成 10 秒更新一次畫面
 time.sleep(10)
 st.rerun()
