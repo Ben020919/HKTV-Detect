@@ -17,41 +17,33 @@ def extract_total_count(text):
     return numbers[-1] if numbers else "0"
 
 def scrape_single_date(page, date_str):
-    base_url = (
-        f"https://merchant.shoalter.com/zh/order-management/orders/toship"
-        f"?bu=HKTV&deliveryType=STANDARD_DELIVERY&productReadyMethod=STANDARD_DELIVERY_ALL"
-        f"&searchType=ORDER_ID&storefrontCodes=H0956004%2CH0956006%2CH0956007%2CH0956008%2CH0956010%2CH0956012"
-        f"&dateType=PICK_UP_DATE&startDate={date_str}&endDate={date_str}"
-        f"&pageSize=20&pageNumber=1&sortColumn=orderDate&waybillStatuses="
-    )
     statuses = [("CONFIRMED", "已建立"), ("ACKNOWLEDGED", "已確認"), ("PACKED", "已包裝"), ("PICKED", "已出貨")]
     date_data = {"date": date_str}
 
-    page.goto(base_url + "CONFIRMED") 
-    page.wait_for_timeout(2500) 
-    page.locator('button:has-text("商戶8小時送貨")').click(force=True)
-    page.wait_for_timeout(1000) 
-
+    # 🚀 終極改法：放棄「點擊下拉選單」，直接用 URL 輪流訪問 4 個狀態
     for status_val, status_name in statuses:
-        page.locator('div.ant-select-selector:has-text("運單狀態")').click(force=True)
-        page.wait_for_timeout(400) 
-        page.locator('button[data-testid="清除全部"]').click(force=True)
-        page.wait_for_timeout(300) 
+        target_url = (
+            f"https://merchant.shoalter.com/zh/order-management/orders/toship"
+            f"?bu=HKTV&deliveryType=STANDARD_DELIVERY&productReadyMethod=STANDARD_DELIVERY_ALL"
+            f"&searchType=ORDER_ID&storefrontCodes=H0956004%2CH0956006%2CH0956007%2CH0956008%2CH0956010%2CH0956012"
+            f"&dateType=PICK_UP_DATE&startDate={date_str}&endDate={date_str}"
+            f"&pageSize=20&pageNumber=1&sortColumn=orderDate&waybillStatuses={status_val}"
+        )
         
-        checkbox = page.locator(f'input[value="{status_val}"]')
+        # 1. 直接跳轉到該狀態的網址
+        page.goto(target_url)
+        page.wait_for_timeout(3500) # 給網頁 3.5 秒充分載入初始資料
+        
+        # 2. 嘗試點擊「商戶8小時送貨」過濾按鈕
         try:
-            if not checkbox.is_checked(): checkbox.click(force=True)
+            # timeout=2000 表示如果 2 秒內找不到這按鈕，就不強求直接跳過
+            page.locator('button:has-text("商戶8小時送貨")').click(timeout=2000, force=True)
+            page.wait_for_timeout(2000) # 點擊後等待 2 秒讓數字刷新
         except Exception:
-            checkbox.check(force=True)
-            
-        page.wait_for_timeout(200)
-        page.locator('button[data-testid="套用"]').click(force=True)
-        
-        # 👉 修正 1：等待時間從 1500 改為 3000，確保雲端主機有足夠時間載入數字
-        page.wait_for_timeout(3000) 
-        
+            pass # 如果當前頁面不需要點擊這個，就略過不報錯
+
+        # 3. 抓取最終結果數字
         try:
-            # 👉 修正 2：找尋結果的 timeout 從 3000 延長到 5000
             result_text = page.locator('span:has-text("結果")').last.inner_text(timeout=5000)
             date_data[status_val] = extract_total_count(result_text)
         except Exception:
@@ -76,10 +68,11 @@ def scrape_hktvmall(username, password):
     results_data["status_msg"] = "⚡ 機器人運行中：每 3 分鐘自動抓取最新資料..."
 
     with sync_playwright() as p:
+        # 🚀 關鍵改法：啟動瀏覽器，並強制設定 1920x1080 大螢幕尺寸
         browser = p.chromium.launch(headless=True) 
-        context = browser.new_context()
+        context = browser.new_context(viewport={'width': 1920, 'height': 1080}) 
         page = context.new_page()
-        page.route("**/*.{png,jpg,jpeg,gif,svg}", lambda route: route.abort())
+        page.route("**/*.{png,jpg,jpeg,gif,svg}", lambda route: route.abort()) # 阻擋圖片載入加速
 
         print(f"\n🤖 [爬蟲] 登入 HKTVmall (香港時間: {now.strftime('%H:%M:%S')})")
         page.goto("https://merchant.shoalter.com/login") 
