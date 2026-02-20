@@ -57,6 +57,7 @@ def scrape_single_date(page, date_str):
     return date_data
 
 def scrape_hktvmall(username, password):
+    # 💡 小提醒：如果你部署到 Streamlit Cloud，主機在國外，建議把這行改成 datetime.utcnow() + timedelta(hours=8)
     now = datetime.now()
     today_str = now.strftime("%Y-%m-%d")
     tomorrow_str = (now + timedelta(days=1)).strftime("%Y-%m-%d")
@@ -124,6 +125,10 @@ def run_scraper_loop():
 @st.cache_resource
 def start_background_scraper():
     print("啟動背景爬蟲執行緒...")
+    
+    # 🟢 這行就是救命關鍵！讓 Streamlit 雲端知道要下載瀏覽器
+    os.system("playwright install chromium")
+    
     thread = threading.Thread(target=run_scraper_loop, daemon=True)
     thread.start()
     return thread
