@@ -46,10 +46,13 @@ def scrape_single_date(page, date_str):
             
         page.wait_for_timeout(200)
         page.locator('button[data-testid="套用"]').click(force=True)
-        page.wait_for_timeout(1500) 
+        
+        # 👉 修正 1：等待時間從 1500 改為 3000，確保雲端主機有足夠時間載入數字
+        page.wait_for_timeout(3000) 
         
         try:
-            result_text = page.locator('span:has-text("結果")').last.inner_text(timeout=3000)
+            # 👉 修正 2：找尋結果的 timeout 從 3000 延長到 5000
+            result_text = page.locator('span:has-text("結果")').last.inner_text(timeout=5000)
             date_data[status_val] = extract_total_count(result_text)
         except Exception:
             date_data[status_val] = "0"
@@ -57,8 +60,9 @@ def scrape_single_date(page, date_str):
     return date_data
 
 def scrape_hktvmall(username, password):
-    # 💡 小提醒：如果你部署到 Streamlit Cloud，主機在國外，建議把這行改成 datetime.utcnow() + timedelta(hours=8)
-    now = datetime.now()
+    # 👉 修正 3：強制使用香港時間 (UTC+8)，避免抓到昨日或明日的錯誤資料
+    now = datetime.utcnow() + timedelta(hours=8)
+    
     today_str = now.strftime("%Y-%m-%d")
     tomorrow_str = (now + timedelta(days=1)).strftime("%Y-%m-%d")
     
@@ -77,7 +81,7 @@ def scrape_hktvmall(username, password):
         page = context.new_page()
         page.route("**/*.{png,jpg,jpeg,gif,svg}", lambda route: route.abort())
 
-        print(f"\n🤖 [爬蟲] 登入 HKTVmall (時間: {now.strftime('%H:%M:%S')})")
+        print(f"\n🤖 [爬蟲] 登入 HKTVmall (香港時間: {now.strftime('%H:%M:%S')})")
         page.goto("https://merchant.shoalter.com/login") 
         page.locator('#account').fill(username)
         page.locator('#password').fill(password)
