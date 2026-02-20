@@ -17,6 +17,7 @@ def extract_total_count(text):
     return numbers[-1] if numbers else "0"
 
 def scrape_single_date(page, date_str):
+    # 這裡的 base_url 不帶狀態參數，只篩選日期
     base_url = (
         f"https://merchant.shoalter.com/zh/order-management/orders/toship"
         f"?bu=HKTV&deliveryType=STANDARD_DELIVERY&productReadyMethod=STANDARD_DELIVERY_ALL"
@@ -27,7 +28,7 @@ def scrape_single_date(page, date_str):
     statuses = [("CONFIRMED", "已建立"), ("ACKNOWLEDGED", "已確認"), ("PACKED", "已包裝"), ("PICKED", "已出貨")]
     date_data = {"date": date_str}
 
-    # 1. 進入當天的初始頁面 (顯示總數)
+    # 1. 進入當天的初始頁面
     page.goto(base_url)
     page.wait_for_timeout(5000) # 給網頁充分的時間初始化
 
@@ -54,11 +55,11 @@ def scrape_single_date(page, date_str):
             checkbox.click(force=True)
             page.wait_for_timeout(1000)
 
-            # 點擊「套用」
+            # 點擊「套用」關閉選單並過濾
             page.locator('button[data-testid="套用"]').click(force=True)
 
             # 🛑 核心關鍵：強制等待 6 秒！
-            # 讓網頁有足夠的時間從總數 (例如 18) 刷新為實際過濾後的數字！
+            # 讓網頁有足夠的時間從總數 (例如 18) 刷新為實際過濾後的數字
             page.wait_for_timeout(6000)
 
             # 抓取刷新後的文字
@@ -87,6 +88,7 @@ def scrape_hktvmall(username, password):
     results_data["status_msg"] = "⚡ 機器人運行中：每 3 分鐘自動抓取最新資料..."
 
     with sync_playwright() as p:
+        # 強制設定大螢幕尺寸避免按鈕走位
         browser = p.chromium.launch(headless=True) 
         context = browser.new_context(viewport={'width': 1920, 'height': 1080}) 
         page = context.new_page()
@@ -129,7 +131,7 @@ def run_scraper_loop():
             print(f"❌ [爬蟲] 發生錯誤: {e}")
             
         print("⏳ 休息 3 分鐘後進行下一輪抓取...\n")
-        time.sleep(180) 
+        time.sleep(60) 
 
 # ==========================================
 # 2. Streamlit 介面與背景執行緒管理
@@ -148,4 +150,57 @@ start_background_scraper()
 st.set_page_config(page_title="HKTVmall 訂單監控", layout="wide")
 st.title("HKTVmall 訂單監控面板")
 
-file_path = os.path.join(os.path.
+file_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'order_data.json')
+
+# 加入「手動歸零」按鈕，方便測試
+if st.button("🗑️ 手動將數據歸零 (測試用)"):
+    zero_data = {
+        "status_msg": "測試中：數據已手動歸零，等待下一次抓取...",
+        "today": {"date": "等待更新...", "CONFIRMED": "0", "ACKNOWLEDGED": "0", "PACKED": "0", "PICKED": "0"},
+        "tomorrow": {"date": "等待更新...", "CONFIRMED": "0", "ACKNOWLEDGED": "0", "PACKED": "0", "PICKED": "0"},
+        "last_updated": "尚未更新"
+    }
+    with open(file_path, 'w', encoding='utf-8') as f:
+        json.dump(zero_data, f, ensure_ascii=False, indent=4)
+    st.success("✅ 數據已歸零！面板即將重新整理...")
+    time.sleep(1)
+    st.rerun()
+
+try:
+    with open(file_path, 'r', encoding='utf-8') as f:
+        data = json.load(f)
+except FileNotFoundError:
+    data = {}
+    st.warning("🔄 正在等待爬蟲抓取第一筆資料，這可能需要幾分鐘，請稍候...")
+
+last_updated = data.get("last_updated", "--")
+status_msg = data.get("status_msg", "初始化中...")
+
+st.caption(f"🕒 系統最後更新時間：{last_updated}")
+if "休息" in status_msg:
+    st.warning(status_msg)
+else:
+    st.success(status_msg)
+
+st.markdown("---")
+
+if "today" in data and data["today"]:
+    st.subheader(f"📦 今日訂單 ({data['today'].get('date', '--')})")
+    col1, col2, col3, col4 = st.columns(4)
+    with col1: st.metric("已建立 (CONFIRMED)", data['today'].get('CONFIRMED', '--'))
+    with col2: st.metric("已確認 (ACKNOWLEDGED)", data['today'].get('ACKNOWLEDGED', '--'))
+    with col3: st.metric("已包裝 (PACKED)", data['today'].get('PACKED', '--'))
+    with col4: st.metric("已出貨 (PICKED)", data['today'].get('PICKED', '--'))
+
+st.markdown("<br>", unsafe_allow_html=True)
+
+if "tomorrow" in data and data["tomorrow"]:
+    st.subheader(f"🚚 明日訂單 ({data['tomorrow'].get('date', '--')})")
+    col1, col2, col3, col4 = st.columns(4)
+    with col1: st.metric("已建立 (CONFIRMED)", data['tomorrow'].get('CONFIRMED', '--'))
+    with col2: st.metric("已確認 (ACKNOWLEDGED)", data['tomorrow'].get('ACKNOWLEDGED', '--'))
+    with col3: st.metric("已包裝 (PACKED)", data['tomorrow'].get('PACKED', '--'))
+    with col4: st.metric("已出貨 (PICKED)", data['tomorrow'].get('PICKED', '--'))
+
+time.sleep(10)
+st.rerun()
