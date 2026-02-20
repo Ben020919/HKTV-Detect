@@ -6,6 +6,7 @@ import json
 import time
 import os
 import re
+from dotenv import load_dotenv
 
 # ==========================================
 # 1. 爬蟲機器人功能區塊
@@ -97,11 +98,12 @@ def scrape_hktvmall(username, password):
         browser.close()
 
 def run_scraper_loop():
-    MY_USERNAME = "lok.wong@letech.com.hk"
-    MY_PASSWORD = "Lokwong0907."
+    load_dotenv()
+    MY_USERNAME = os.getenv("HKTV_USERNAME")
+    MY_PASSWORD = os.getenv("HKTV_PASSWORD")
     
-    if not MY_USERNAME or not MY_PASSWORD or MY_USERNAME == "你的帳號@example.com":
-        print("❌Data！")
+    if not MY_USERNAME or not MY_PASSWORD:
+        print("❌ [系統嚴重錯誤] 找不到帳號或密碼！")
         return
         
     while True:
@@ -110,6 +112,7 @@ def run_scraper_loop():
         except Exception as e:
             print(f"❌ [爬蟲] 發生錯誤: {e}")
             
+        # 👉 修改 1：改成 180 秒（3分鐘）執行一次爬蟲
         print("⏳ 休息 3 分鐘後進行下一輪抓取...\n")
         time.sleep(180) 
 
@@ -173,6 +176,6 @@ if "tomorrow" in data and data["tomorrow"]:
     with col3: st.metric("已包裝 (PACKED)", data['tomorrow'].get('PACKED', '--'))
     with col4: st.metric("已出貨 (PICKED)", data['tomorrow'].get('PICKED', '--'))
 
-# 畫面每 10 秒更新一次
+# 👉 修改 2：改成 10 秒更新一次畫面
 time.sleep(10)
 st.rerun()
