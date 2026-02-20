@@ -97,12 +97,11 @@ def scrape_hktvmall(username, password):
         browser.close()
 
 def run_scraper_loop():
-    # 👇 直接在這裡填寫你的真實帳號與密碼 (記得保留雙引號 "")
     MY_USERNAME = "lok.wong@letech.com.hk"
     MY_PASSWORD = "Lokwong0907."
     
     if not MY_USERNAME or not MY_PASSWORD or MY_USERNAME == "你的帳號@example.com":
-        print("❌ [系統嚴重錯誤] 請記得在程式碼中填寫真實的帳號密碼！")
+        print("❌Data！")
         return
         
     while True:
